@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# Input: cyber_breaches <FILENAME> <COMMAND>
+# <COMMAND> can be either one of the follows:
+# 1. maxstate
+# 2. maxyear
+# 3. <A two letter state code>   eg. CA or NY
+# 4. <A four digit year>         eg. 2010 or 2012
+
+argument_number_check() {
+    # Check if there are two arguments
+    if [ $# -eq 2 ]; then
+        FILENAME=$1
+        COMMAND=$2
+    else
+        printf "Invalid number of arguments!\n" >&2
+        exit 1
+    fi
+}
+
+file_check() {
+    FILENAME=$1
+    # Check if length of FILENAME is greater than zero
+    if [ -z "$FILENAME" ]; then
+        printf "No database file given!\n" >&2
+        exit 1
+    fi
+    # Check if the file exits
+    if ! [ -e "$FILENAME" ]; then
+        printf "Argument 1: File does not exist!\n" >&2
+        exit 1
+    fi
+    # Check if the file is readable
+    if ! [ -r "$FILENAME" ]; then
+        printf "Argument 1: File is not readable!\n" >&2
+        exit 1
+    fi
+}
+
+state_code_check() {
+    # Check if state code is valid
+    STATE=$2
+    us_state_list=("AL" "AK" "AZ" "AR" "CA" "CO" "CT" "DE" "FL" "GA" "HI" "ID" "IL" "IN" "IA" "KS" "KY" "LA" "ME" "MD" "MA" "MI" "MN" "MS" "MO" "MT" "NE" "NV" "NH" "NJ" "NM" "NY" "NC" "ND" "OH" "OK" "OR" "PA" "RI" "SC" "SD" "TN" "TX" "UT" "VT" "VA" "WA" "WV" "WI" "WY")
+    match_count=0
+    for elemet in "${us_state_list[@]}"; do
+        if [[ $elemet == "$STATE" ]]; then
+            match_count=$((match_count + 1))
+        fi
+    done
+    if [[ $match_count == 0 ]]; then
+        printf "\"%s\" is not a valid US state code!\n" "$STATE" >&2
+        exit 1
+    fi
+}
+
+command_check_run() {
+    # Check if length of COMMAND is greater than zero
+    if [ -z "$COMMAND" ]; then
+        printf "No command given\n" >&2
+        exit 1
+    fi
+    # Check if COMMAND is maxstate or maxyear
+    if [[ "$COMMAND" == max* ]]; then
+        if [[ "$COMMAND" == maxstate ]]; then
+            maxstate
+        elif [[ "$COMMAND" == maxyear ]]; then
+            maxyear
+        else
+            printf "The max commands are either maxstate or maxyear\n" >&2
+            exit 1
+        fi
+    # Check if COMMAND is a state code
+    elif [[ "$COMMAND" =~ ^[A-Z]{2}$ ]]; then
+        # Check if the state code is valid
+        state_code_check "$@"
+        # Run the state code command
+        state_code "$@"
+    # Check if COMMAND is a year
+    elif [[ "$COMMAND" =~ ^[0-9]{4}$ ]]; then
+        # Run the year command
+        year "$@"
+    else
+        printf "\"%s\" is not a valid command!\n" "$COMMAND" >&2
+        #printf "<COMMAND> can be only one of the following: \n maxstate \n maxyear \n <A two letter state code> \n <A four digit year>\n"
+        exit 1
+    fi
+}
+
+maxstate() {
+    state="$(cut -f2 "$FILENAME" | sort | uniq -c | sort -rn | head -n 1 | awk '{print $2}')"
+    count="$(cut -f2 "$FILENAME" | sort | uniq -c | sort -rn | head -n 1 | awk '{print $1}')"
+    printf "State with greatest number of incidents is: %s with count %d\n" "$state" "$count"
+}
+
+maxyear() {
+    year="$(cut -f8 "$FILENAME" | sort | uniq -c | sort -rn | head -n 1 | awk '{print $2}')"
+    count="$(cut -f8 "$FILENAME" | sort | uniq -c | sort -rn | head -n 1 | awk '{print $1}')"
+    printf "Year with greatest number of incidents is: %s with count %d\n" "$year" "$count"
+}
+
+state_code() {
+    FILENAME=$1
+    state=$2
+
+    year="$(awk -v state="$state" -F'\t' '{ if ($2 == state) print $0 }' "$FILENAME" | cut -f8 | sort | uniq -c | sort -rn | head -n 1 | awk '{print $2}')"
+    count="$(awk -v state="$state" -F'\t' '{ if ($2 == state) print $0 }' "$FILENAME" | cut -f8 | sort | uniq -c | sort -rn | head -n 1 | awk '{print $1}')"
+
+    printf "Year with greatest number of incidents for %s is in %s with count %d\n" "$state" "$year" "$count"
+}
+
+year() {
+    FILENAME=$1
+    year=$2
+    state="$(awk -v year="$year" -F'\t' '{ if ($8 == year) print $0 }' "$FILENAME" | cut -f2 | sort | uniq -c | sort -rn | awk 'FNR == 1 {print $2}')"
+    count="$(awk -v year="$year" -F'\t' '{ if ($8 == year) print $0 }' "$FILENAME" | cut -f2 | sort | uniq -c | sort -rn | awk 'FNR == 1 {print $1}')"
+
+    printf "State with greatest number of incidents for %s is in %s with count %d\n" "$year" "$state" "$count"
+}
+
+main() {
+    argument_number_check "$@"
+    file_check "$1"
+    command_check_run "$@"
+}
+
+main "$@"
